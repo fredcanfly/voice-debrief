@@ -7,6 +7,7 @@ from uuid import uuid4
 
 MIGRATION_0001 = "0001_initial_schema"
 MIGRATION_0002 = "0002_session_lifecycle"
+MIGRATION_0003 = "0003_transcripts"
 
 MIGRATION_0001_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -27,6 +28,17 @@ MIGRATION_0002_SQL = """
 ALTER TABLE debrief_sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'created';
 ALTER TABLE debrief_sessions ADD COLUMN started_at TEXT;
 ALTER TABLE debrief_sessions ADD COLUMN ended_at TEXT;
+"""
+
+MIGRATION_0003_SQL = """
+CREATE TABLE IF NOT EXISTS debrief_transcripts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    transcript_text TEXT NOT NULL,
+    stt_model TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(session_id) REFERENCES debrief_sessions(session_id)
+);
 """
 
 
@@ -57,6 +69,15 @@ def init_sqlite(sqlite_db_path: str | Path) -> Path:
             VALUES (?)
             """,
             (MIGRATION_0002,),
+        )
+
+        conn.executescript(MIGRATION_0003_SQL)
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO schema_migrations (migration_name)
+            VALUES (?)
+            """,
+            (MIGRATION_0003,),
         )
         conn.commit()
 
@@ -104,6 +125,18 @@ def set_session_ended(sqlite_db_path: str | Path, session_id: str) -> None:
         )
         if cur.rowcount == 0:
             raise ValueError("session not found")
+        conn.commit()
+
+
+def save_transcript(sqlite_db_path: str | Path, session_id: str, transcript_text: str, stt_model: str | None) -> None:
+    with sqlite3.connect(sqlite_db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO debrief_transcripts (session_id, transcript_text, stt_model)
+            VALUES (?, ?, ?)
+            """,
+            (session_id, transcript_text, stt_model),
+        )
         conn.commit()
 
 

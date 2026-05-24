@@ -6,8 +6,16 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .db import create_session, get_session, init_sqlite, set_session_ended, set_session_started
+from .db import (
+    create_session,
+    get_session,
+    init_sqlite,
+    save_transcript,
+    set_session_ended,
+    set_session_started,
+)
 from .models import AudioUploadResponse, SessionCreateResponse, SessionStatusResponse
+from .stt_openai import OpenAITranscriptionError, transcribe_file_openai
 
 ROOT = Path(__file__).resolve().parents[2]
 PWA_DIR = ROOT / "frontend" / "pwa"
@@ -79,6 +87,32 @@ def create_app() -> FastAPI:
             filename=target.name,
             bytes_received=len(payload),
         )
+
+    @app.post("/api/debrief/sessions/{session_id}/transcribe")
+    async def transcribe_session_audio(session_id: str, file: UploadFile = File(...)) -> dict:
+        try:
+            _ = get_session(DB_PATH, session_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="session not found")
+
+        upload_id = uuid4().hex[:16]
+        suffix = Path(file.filename or "audio.webm").suffix or ".webm"
+        target = UPLOADS_DIR / f"{session_id}-{upload_id}{suffix}"
+        payload = await file.read()
+        target.write_bytes(payload)
+
+        try:
+            result = transcribe_file_openai(target)
+        except OpenAITranscriptionError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        save_transcript(DB_PATH, session_id, result["text"], result.get("model"))
+        return {
+            "session_id": session_id,
+            "transcript_text": result["text"],
+            "stt_model": result.get("model"),
+            "bytes_received": len(payload),
+        }
 
     return app
 
