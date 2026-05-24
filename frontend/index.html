@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#111827" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <title>Vicki Debrief</title>
+</head>
+<body>
+  <main>
+    <header class="hero-status">
+      <div>
+        <p class="eyebrow">Car mode</p>
+        <h1>Vicki Debrief</h1>
+      </div>
+      <button id="wakeLock" class="wake-lock-button" type="button">Keep Screen Awake</button>
+    </header>
+    <p id="status" class="status-text">Ready.</p>
+
+    <section class="car-controls" aria-label="Driving controls">
+      <button id="start" class="start-button">Start Debrief</button>
+      <button id="record" class="record-button" disabled>Record</button>
+      <button id="end" class="end-button" disabled>End Debrief</button>
+    </section>
+
+    <section class="hands-free-card card primary-card">
+      <h2>Mic recording</h2>
+      <p class="hint">Big-button flow: Start Debrief, Record, Stop Recording, then End Debrief when done.</p>
+      <div class="hands-free-options">
+        <div class="auto-stop-row">
+          <button id="autoStop" class="auto-stop-button active" type="button">Silence Auto-Stop On</button>
+          <p id="autoStopState" class="hint">After you talk, Vicki will stop recording when you pause.</p>
+        </div>
+        <div class="auto-stop-row">
+          <button id="autoContinue" class="auto-continue-button active" type="button">Hands-Free Continue On</button>
+          <p id="autoContinueState" class="hint">After Vicki replies, the mic opens again for your next turn.</p>
+        </div>
+      </div>
+      <p id="recordTimer" class="timer">00:00</p>
+    </section>
+
+    <section class="card">
+      <h2>Final notes</h2>
+      <p class="hint">Tap End Debrief to generate a structured markdown summary and save it locally.</p>
+      <div id="summaryActions" class="summary-actions hidden">
+        <a id="summaryLink" href="#" target="_blank" rel="noopener">Open saved markdown</a>
+        <button id="copySummary" type="button">Copy summary</button>
+      </div>
+      <pre id="summaryText" class="summary-text"></pre>
+    </section>
+
+    <details class="advanced-tests">
+      <summary>Advanced testing controls</summary>
+      <section class="card">
+        <label for="message">Text test input</label>
+        <textarea id="message" rows="4" placeholder="Type a debrief turn here while testing..."></textarea>
+        <button id="send" disabled>Send Turn</button>
+      </section>
+      <section class="card">
+        <label for="audioFile">Audio file test</label>
+        <input id="audioFile" type="file" accept="audio/*" />
+        <button id="sendAudio" disabled>Transcribe + Send Audio</button>
+      </section>
+      <section class="card">
+        <h2>Transcript</h2>
+        <div id="log"></div>
+      </section>
+      <section class="card">
+        <h2>Endpoint stats</h2>
+        <p id="endpointStats" class="hint">accepted: 0 · filtered: 0 · rate: 0%</p>
+        <p id="endpointThresholds" class="hint">speech≥0.55s · chars≥8 · VAD silence 700ms</p>
+        <div class="field-grid">
+          <label for="endpointMinSpeech">Min speech seconds</label>
+          <input id="endpointMinSpeech" type="number" step="0.05" min="0" value="0.55" />
+          <label for="endpointMinChars">Min text chars</label>
+          <input id="endpointMinChars" type="number" step="1" min="0" value="8" />
+          <label for="endpointVadSilence">VAD silence ms</label>
+          <input id="endpointVadSilence" type="number" step="50" min="0" value="700" />
+        </div>
+        <div class="button-row">
+          <button id="applyEndpointTuning" type="button">Apply endpoint tuning</button>
+          <button id="applyDrivingPreset" type="button">Driving preset</button>
+          <button id="applyOfficePreset" type="button">Office preset</button>
+          <button id="resetEndpointTuning" type="button">Reset to defaults</button>
+        </div>
+      </section>
+    </details>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

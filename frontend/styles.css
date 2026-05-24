@@ -1,0 +1,43 @@
+body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: #0f172a; color: #f8fafc; }
+main { max-width: 760px; margin: 0 auto; padding: 18px; }
+h1 { font-size: clamp(1.9rem, 7vw, 3.4rem); margin: 0; }
+h2 { margin-top: 0; }
+.hero-status { position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 12px 0 14px; background: linear-gradient(180deg, #0f172a 82%, rgba(15, 23, 42, 0)); }
+.eyebrow { margin: 0 0 2px; color: #67e8f9; text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.78rem; font-weight: 800; }
+.status-text { color: #bfdbfe; min-height: 3.5rem; font-size: clamp(1.25rem, 5vw, 2rem); line-height: 1.2; font-weight: 800; margin: 8px 0 16px; }
+button { border: 0; border-radius: 18px; padding: 16px; font-size: 1.05rem; font-weight: 800; background: #38bdf8; color: #082f49; touch-action: manipulation; }
+button:disabled { opacity: 0.45; }
+.wake-lock-button { align-self: stretch; min-width: 118px; padding: 10px 12px; font-size: 0.9rem; background: #334155; color: #e0f2fe; }
+.wake-lock-button.active { background: #facc15; color: #422006; }
+.car-controls { display: grid; grid-template-columns: 1fr; gap: 14px; margin: 16px 0 20px; }
+.car-controls button { min-height: 150px; font-size: clamp(1.6rem, 9vw, 3rem); border-radius: 26px; box-shadow: 0 16px 35px rgba(0, 0, 0, 0.28); }
+.start-button { background: #38bdf8; color: #082f49; }
+.end-button, #end { background: #fb7185; color: #4c0519; }
+.card { background: #111827; border: 1px solid #334155; border-radius: 18px; padding: 16px; margin: 16px 0; }
+.primary-card { border-color: #38bdf8; box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25); }
+.hands-free-card { border-color: #22c55e; }
+.hands-free-options { display: grid; gap: 10px; margin: 12px 0; }
+.auto-stop-row { display: grid; grid-template-columns: minmax(160px, 0.9fr) 1.1fr; gap: 12px; align-items: center; margin: 0; }
+.auto-stop-button, .auto-continue-button { min-height: 72px; background: #334155; color: #e0f2fe; }
+.auto-stop-button.active { background: #a3e635; color: #1a2e05; }
+.auto-continue-button.active { background: #67e8f9; color: #083344; }
+.hint { color: #cbd5e1; line-height: 1.4; }
+label { display: block; margin-bottom: 8px; color: #cbd5e1; }
+textarea { width: 100%; box-sizing: border-box; border-radius: 12px; border: 1px solid #475569; padding: 12px; background: #020617; color: #f8fafc; font-size: 1rem; }
+#send, #sendAudio { width: 100%; margin-top: 12px; }
+.record-button { background: #22c55e; color: #052e16; }
+.record-button.recording { background: #ef4444; color: #450a0a; animation: pulse 1.25s infinite; }
+.timer { text-align: center; color: #fca5a5; font-size: clamp(1.8rem, 9vw, 3.6rem); font-variant-numeric: tabular-nums; margin: 8px 0 0; font-weight: 900; }
+.summary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: center; margin: 12px 0; }
+.summary-actions a { color: #7dd3fc; font-weight: 700; }
+.summary-actions button { padding: 12px; }
+.hidden { display: none; }
+.summary-text { white-space: pre-wrap; overflow-wrap: anywhere; background: #020617; border: 1px solid #334155; border-radius: 12px; padding: 12px; min-height: 64px; color: #e2e8f0; }
+.advanced-tests { margin: 16px 0 32px; }
+.advanced-tests summary { cursor: pointer; color: #93c5fd; font-weight: 800; padding: 16px; border: 1px solid #334155; border-radius: 16px; background: #111827; }
+.entry { border-top: 1px solid #334155; padding: 10px 0; white-space: pre-wrap; }
+.entry:first-child { border-top: 0; }
+.speaker { color: #67e8f9; font-weight: 700; }
+@media (min-width: 680px) { .car-controls { grid-template-columns: 1fr 1fr; } .record-button { grid-column: span 2; } }
+@media (max-width: 520px) { .auto-stop-row { grid-template-columns: 1fr; } }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.015); } }

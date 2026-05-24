@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local env/secrets
+.env
+.env.local
+
+# Generated runtime data
+data/audio/
+data/uploads/
+data/transcripts/
+data/debriefs/
+
+# Node deps / build artifacts
+discord-voice-bridge/node_modules/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
