@@ -213,6 +213,24 @@ def create_app() -> FastAPI:
             markdown=result["markdown"],
         )
 
+    @app.get("/api/debrief/sessions/{session_id}/document-download")
+    async def download_debrief_document(session_id: str) -> FileResponse:
+        try:
+            _ = get_session(DB_PATH, session_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="session not found")
+
+        candidates = sorted(
+            GENERATED_DOCS_DIR.glob(f"{session_id}-*.md"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if not candidates:
+            raise HTTPException(status_code=404, detail="no generated document for this session")
+
+        target = candidates[0]
+        return FileResponse(path=target, media_type="text/markdown", filename=target.name)
+
     return app
 
 

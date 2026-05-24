@@ -21,10 +21,14 @@
     <main>
       <section class="card">
         <h1>Voice Debrief Assistant</h1>
-        <p class="hint">P1-02: Capture and upload recorded audio from PWA to backend.</p>
+        <p class="hint">P1-07: Capture/upload, then download generated debrief markdown.</p>
+        <div class="row">
+          <input id="sessionId" type="text" placeholder="session id (optional)" style="flex:1; min-width:220px; border:1px solid #475569; background:#0b1220; color:#e2e8f0; border-radius:10px; padding:.65rem .9rem;" />
+        </div>
         <div class="row">
           <button id="recordBtn" type="button">Start Recording</button>
           <button id="stopBtn" type="button" disabled>Stop & Upload</button>
+          <button id="downloadBtn" type="button">Download Latest Debrief</button>
         </div>
         <p id="status">Ready.</p>
         <p id="result" class="hint"></p>

@@ -3,6 +3,8 @@ let chunks = [];
 
 const recordBtn = document.getElementById('recordBtn');
 const stopBtn = document.getElementById('stopBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const sessionIdInput = document.getElementById('sessionId');
 const statusEl = document.getElementById('status');
 const resultEl = document.getElementById('result');
 
@@ -62,5 +64,39 @@ async function uploadAudio(blob) {
   }
 }
 
+async function downloadLatestDebrief() {
+  const sessionId = (sessionIdInput?.value || '').trim();
+  if (!sessionId) {
+    setStatus('Enter a session id before download.', 'err');
+    return;
+  }
+
+  try {
+    setStatus('Preparing download...');
+    const response = await fetch(`/api/debrief/sessions/${encodeURIComponent(sessionId)}/document-download`);
+    if (!response.ok) throw new Error(await response.text());
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+
+    const disposition = response.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    const filename = match?.[1] || `${sessionId}-debrief.md`;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    setStatus('Download started.', 'ok');
+  } catch (error) {
+    setStatus(`Download failed: ${error.message}`, 'err');
+  }
+}
+
 recordBtn.addEventListener('click', () => { startRecording().catch((e) => setStatus(`Mic error: ${e.message}`, 'err')); });
 stopBtn.addEventListener('click', () => { stopRecording().catch((e) => setStatus(`Stop error: ${e.message}`, 'err')); });
+downloadBtn.addEventListener('click', () => { downloadLatestDebrief().catch((e) => setStatus(`Download error: ${e.message}`, 'err')); });
