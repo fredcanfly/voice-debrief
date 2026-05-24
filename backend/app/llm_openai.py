@@ -4,6 +4,8 @@ import os
 
 import httpx
 
+from backend.prompt_loader import render_prompt
+
 
 class OpenAIFollowupError(RuntimeError):
     pass
@@ -31,12 +33,7 @@ def generate_followup_question_openai(*, transcript_text: str, api_key: str | No
 
     llm_model = model or os.getenv("OPENAI_MODEL") or "gpt-4.1-mini"
 
-    prompt = (
-        "You are a concise reflective interviewer for a meeting debrief app. "
-        "Given transcript text, produce exactly one short follow-up question. "
-        "Rules: under 12 words, no filler, no preface, output only the question text.\n\n"
-        f"Transcript:\n{transcript_text.strip()}"
-    )
+    prompt = render_prompt('followup_question', transcript_text=transcript_text.strip())
 
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     payload = {

@@ -5,7 +5,7 @@ import re
 
 import httpx
 
-from backend.prompts import FINAL_SUMMARY_REQUEST
+from backend.prompt_loader import render_prompt
 
 
 class OpenAIDebriefError(RuntimeError):
@@ -49,11 +49,7 @@ def generate_debrief_document_openai(*, transcript_text: str, api_key: str | Non
 
     llm_model = model or os.getenv('OPENAI_MODEL') or 'gpt-4.1-mini'
 
-    prompt = (
-        f"{FINAL_SUMMARY_REQUEST}\n\n"
-        "Use this transcript bundle as source of truth.\n"
-        f"Transcript:\n{transcript_text.strip()}"
-    )
+    prompt = render_prompt('final_summary', transcript_text=transcript_text.strip())
 
     headers = {'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}
     payload = {'model': llm_model, 'input': prompt, 'max_output_tokens': 1400}
