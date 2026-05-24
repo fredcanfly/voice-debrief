@@ -10,12 +10,15 @@ from .db import (
     create_session,
     get_latest_transcript,
     get_session,
+    get_session_memory_facts,
     get_session_transcripts,
     init_sqlite,
+    save_memory_facts,
     save_transcript,
     set_session_ended,
     set_session_started,
 )
+from .hermes_memory import extract_memory_facts_from_transcript
 from .llm_debrief_openai import OpenAIDebriefError, generate_debrief_document_openai
 from .llm_openai import OpenAIFollowupError, generate_followup_question_openai
 from .models import (
@@ -124,6 +127,8 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc))
 
         save_transcript(DB_PATH, session_id, result["text"], result.get("model"))
+        memory_facts = extract_memory_facts_from_transcript(result["text"])
+        save_memory_facts(DB_PATH, session_id, memory_facts)
         return {
             "session_id": session_id,
             "transcript_text": result["text"],
@@ -143,7 +148,10 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="No transcript available for this session")
 
         try:
-            result = generate_followup_question_openai(transcript_text=str(latest["transcript_text"]))
+            result = generate_followup_question_openai(
+                transcript_text=str(latest["transcript_text"]),
+                memory_facts=get_session_memory_facts(DB_PATH, session_id),
+            )
         except OpenAIFollowupError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 

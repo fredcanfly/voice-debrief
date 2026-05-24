@@ -8,6 +8,7 @@ from uuid import uuid4
 MIGRATION_0001 = "0001_initial_schema"
 MIGRATION_0002 = "0002_session_lifecycle"
 MIGRATION_0003 = "0003_transcripts"
+MIGRATION_0004 = "0004_memory_facts"
 
 MIGRATION_0001_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -36,6 +37,16 @@ CREATE TABLE IF NOT EXISTS debrief_transcripts (
     session_id TEXT NOT NULL,
     transcript_text TEXT NOT NULL,
     stt_model TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(session_id) REFERENCES debrief_sessions(session_id)
+);
+"""
+
+MIGRATION_0004_SQL = """
+CREATE TABLE IF NOT EXISTS debrief_memory_facts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    fact_text TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY(session_id) REFERENCES debrief_sessions(session_id)
 );
@@ -78,6 +89,15 @@ def init_sqlite(sqlite_db_path: str | Path) -> Path:
             VALUES (?)
             """,
             (MIGRATION_0003,),
+        )
+
+        conn.executescript(MIGRATION_0004_SQL)
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO schema_migrations (migration_name)
+            VALUES (?)
+            """,
+            (MIGRATION_0004,),
         )
         conn.commit()
 
@@ -194,3 +214,35 @@ def get_session_transcripts(sqlite_db_path: str | Path, session_id: str) -> list
         {"transcript_text": r[0], "stt_model": r[1], "created_at": r[2]}
         for r in rows
     ]
+
+
+def save_memory_facts(sqlite_db_path: str | Path, session_id: str, facts: list[str]) -> None:
+    clean_facts = [f.strip() for f in facts if str(f).strip()]
+    if not clean_facts:
+        return
+
+    with sqlite3.connect(sqlite_db_path) as conn:
+        conn.executemany(
+            """
+            INSERT INTO debrief_memory_facts (session_id, fact_text)
+            VALUES (?, ?)
+            """,
+            [(session_id, fact) for fact in clean_facts],
+        )
+        conn.commit()
+
+
+def get_session_memory_facts(sqlite_db_path: str | Path, session_id: str, limit: int = 20) -> list[str]:
+    with sqlite3.connect(sqlite_db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT fact_text
+            FROM debrief_memory_facts
+            WHERE session_id=?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (session_id, limit),
+        ).fetchall()
+
+    return [r[0] for r in reversed(rows)]

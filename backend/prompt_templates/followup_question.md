@@ -7,5 +7,8 @@ Rules:
 - no preface
 - output only the question text
 
+Known stable context facts:
+{memory_context}
+
 Transcript:
 {transcript_text}

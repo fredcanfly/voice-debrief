@@ -26,14 +26,26 @@ def _extract_output_text(body: dict) -> str:
     return ""
 
 
-def generate_followup_question_openai(*, transcript_text: str, api_key: str | None = None, model: str | None = None) -> dict:
+def generate_followup_question_openai(
+    *,
+    transcript_text: str,
+    memory_facts: list[str] | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
     key = api_key or os.getenv("OPENAI_API_KEY")
     if not key:
         raise OpenAIFollowupError("OPENAI_API_KEY is not set")
 
     llm_model = model or os.getenv("OPENAI_MODEL") or "gpt-4.1-mini"
+    facts = [f"- {item.strip()}" for item in (memory_facts or []) if str(item).strip()]
+    memory_context = "\n".join(facts) if facts else "- none"
 
-    prompt = render_prompt('followup_question', transcript_text=transcript_text.strip())
+    prompt = render_prompt(
+        'followup_question',
+        transcript_text=transcript_text.strip(),
+        memory_context=memory_context,
+    )
 
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     payload = {
