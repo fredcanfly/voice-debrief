@@ -31,3 +31,11 @@ class FollowUpAudioResponse(BaseModel):
     llm_model: str
     tts_provider: str
     audio_url: str
+
+
+class DebriefDocumentResponse(BaseModel):
+    session_id: str
+    title: str
+    llm_model: str
+    file_path: str
+    markdown: str

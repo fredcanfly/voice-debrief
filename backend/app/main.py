@@ -10,13 +10,22 @@ from .db import (
     create_session,
     get_latest_transcript,
     get_session,
+    get_session_transcripts,
     init_sqlite,
     save_transcript,
     set_session_ended,
     set_session_started,
 )
+from .llm_debrief_openai import OpenAIDebriefError, generate_debrief_document_openai
 from .llm_openai import OpenAIFollowupError, generate_followup_question_openai
-from .models import AudioUploadResponse, FollowUpAudioResponse, FollowUpQuestionResponse, SessionCreateResponse, SessionStatusResponse
+from .models import (
+    AudioUploadResponse,
+    DebriefDocumentResponse,
+    FollowUpAudioResponse,
+    FollowUpQuestionResponse,
+    SessionCreateResponse,
+    SessionStatusResponse,
+)
 from .stt_openai import OpenAITranscriptionError, transcribe_file_openai
 from .tts_kokoro import KokoroTTSError, synthesize_kokoro_tts
 
@@ -25,6 +34,7 @@ PWA_DIR = ROOT / "frontend" / "pwa"
 DB_PATH = ROOT / "data" / "voice_debrief.sqlite3"
 UPLOADS_DIR = ROOT / "data" / "uploads"
 AUDIO_DIR = ROOT / "data" / "audio"
+GENERATED_DOCS_DIR = ROOT / "data" / "generated_docs"
 
 
 class SessionCreateRequest(BaseModel):
@@ -36,6 +46,7 @@ def create_app() -> FastAPI:
     init_sqlite(DB_PATH)
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    GENERATED_DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
     app.mount("/pwa", StaticFiles(directory=str(PWA_DIR)), name="pwa")
     app.mount("/audio", StaticFiles(directory=str(AUDIO_DIR)), name="audio")
@@ -167,6 +178,39 @@ def create_app() -> FastAPI:
             llm_model=llm_result["model"],
             tts_provider="kokoro",
             audio_url=f"/audio/{audio_path.name}",
+        )
+
+    @app.post("/api/debrief/sessions/{session_id}/generate-document", response_model=DebriefDocumentResponse)
+    async def generate_debrief_document(session_id: str) -> DebriefDocumentResponse:
+        try:
+            _ = get_session(DB_PATH, session_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="session not found")
+
+        transcripts = get_session_transcripts(DB_PATH, session_id)
+        if not transcripts:
+            raise HTTPException(status_code=400, detail="No transcript available for this session")
+
+        transcript_bundle = "\n\n".join(
+            f"[{idx+1}] {t['transcript_text']}" for idx, t in enumerate(transcripts) if str(t.get("transcript_text") or "").strip()
+        ).strip()
+        if not transcript_bundle:
+            raise HTTPException(status_code=400, detail="No transcript available for this session")
+
+        try:
+            result = generate_debrief_document_openai(transcript_text=transcript_bundle)
+        except OpenAIDebriefError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        doc_path = GENERATED_DOCS_DIR / f"{session_id}-{result['slug']}.md"
+        doc_path.write_text(result["markdown"], encoding="utf-8")
+
+        return DebriefDocumentResponse(
+            session_id=session_id,
+            title=result["title"],
+            llm_model=result["model"],
+            file_path=str(doc_path),
+            markdown=result["markdown"],
         )
 
     return app

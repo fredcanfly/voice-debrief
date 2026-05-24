@@ -176,3 +176,21 @@ def get_latest_transcript(sqlite_db_path: str | Path, session_id: str) -> dict[s
         "stt_model": row[1],
         "created_at": row[2],
     }
+
+
+def get_session_transcripts(sqlite_db_path: str | Path, session_id: str) -> list[dict[str, str | None]]:
+    with sqlite3.connect(sqlite_db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT transcript_text, stt_model, created_at
+            FROM debrief_transcripts
+            WHERE session_id=?
+            ORDER BY id ASC
+            """,
+            (session_id,),
+        ).fetchall()
+
+    return [
+        {"transcript_text": r[0], "stt_model": r[1], "created_at": r[2]}
+        for r in rows
+    ]
