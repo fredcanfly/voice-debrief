@@ -26,6 +26,22 @@ def _extract_output_text(body: dict) -> str:
     return ""
 
 
+def _enforce_concise_question(text: str, max_words: int = 12) -> str:
+    normalized = " ".join((text or "").strip().split())
+    if not normalized:
+        return ""
+
+    words = normalized.split(" ")
+    if len(words) > max_words:
+        normalized = " ".join(words[:max_words]).rstrip(".,;:!?")
+
+    if not normalized.endswith("?"):
+        normalized = normalized.rstrip(".,;:!") + "?"
+
+    return normalized
+
+
+
 def generate_followup_question_openai(
     *,
     transcript_text: str,
@@ -69,7 +85,7 @@ def generate_followup_question_openai(
         raise OpenAIFollowupError(f"OpenAI follow-up error {response.status_code}: {response.text}")
 
     body = response.json()
-    question = _extract_output_text(body)
+    question = _enforce_concise_question(_extract_output_text(body))
     if not question:
         raise OpenAIFollowupError("OpenAI follow-up returned empty text")
 
