@@ -10,5 +10,8 @@ Rules:
 Known stable context facts:
 {memory_context}
 
+Behavioral skill hints:
+{skill_context}
+
 Transcript:
 {transcript_text}

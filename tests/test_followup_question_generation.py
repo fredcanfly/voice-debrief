@@ -21,9 +21,10 @@ def test_followup_question_from_latest_transcript(monkeypatch):
     transcribe_resp = client.post(f'/api/debrief/sessions/{session_id}/transcribe', files=files)
     assert transcribe_resp.status_code == 200
 
-    def fake_followup(*, transcript_text: str, memory_facts: list[str]):
+    def fake_followup(*, transcript_text: str, memory_facts: list[str], skill_hints: list[str]):
         assert 'Johnson family' in transcript_text
         assert isinstance(memory_facts, list)
+        assert isinstance(skill_hints, list)
         return {'question': 'Who owns the counseling follow-up by Friday?', 'model': 'gpt-4.1-mini'}
 
     monkeypatch.setattr('backend.app.main.generate_followup_question_openai', fake_followup)
@@ -47,7 +48,7 @@ def test_followup_question_requires_transcript(monkeypatch):
     session_resp = client.post('/api/debrief/sessions', json={})
     session_id = session_resp.json()['session_id']
 
-    def fake_followup(*, transcript_text: str):
+    def fake_followup(*, transcript_text: str, memory_facts: list[str], skill_hints: list[str]):
         return {'question': 'irrelevant', 'model': 'gpt-4.1-mini'}
 
     monkeypatch.setattr('backend.app.main.generate_followup_question_openai', fake_followup)

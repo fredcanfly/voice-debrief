@@ -30,6 +30,7 @@ def generate_followup_question_openai(
     *,
     transcript_text: str,
     memory_facts: list[str] | None = None,
+    skill_hints: list[str] | None = None,
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
@@ -40,11 +41,14 @@ def generate_followup_question_openai(
     llm_model = model or os.getenv("OPENAI_MODEL") or "gpt-4.1-mini"
     facts = [f"- {item.strip()}" for item in (memory_facts or []) if str(item).strip()]
     memory_context = "\n".join(facts) if facts else "- none"
+    hints = [f"- {item.strip()}" for item in (skill_hints or []) if str(item).strip()]
+    skill_context = "\n".join(hints) if hints else "- none"
 
     prompt = render_prompt(
         'followup_question',
         transcript_text=transcript_text.strip(),
         memory_context=memory_context,
+        skill_context=skill_context,
     )
 
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}

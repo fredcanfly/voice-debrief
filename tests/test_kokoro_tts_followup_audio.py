@@ -13,7 +13,7 @@ def test_followup_audio_returns_playable_url(monkeypatch):
     session_id = create_resp.json()['session_id']
     save_transcript(DB_PATH, session_id, 'Need owner for Johnson family follow-up by Friday.', 'manual-test')
 
-    def fake_followup(*, transcript_text: str):
+    def fake_followup(*, transcript_text: str, memory_facts: list[str], skill_hints: list[str]):
         assert 'Johnson family' in transcript_text
         return {'question': 'Who owns the Johnson family follow-up?', 'model': 'gpt-4.1-mini'}
 
@@ -45,7 +45,7 @@ def test_followup_audio_without_transcript_returns_400(monkeypatch):
     create_resp = client.post('/api/debrief/sessions', json={})
     session_id = create_resp.json()['session_id']
 
-    def fake_followup(*, transcript_text: str):
+    def fake_followup(*, transcript_text: str, memory_facts: list[str], skill_hints: list[str]):
         return {'question': 'irrelevant', 'model': 'gpt-4.1-mini'}
 
     monkeypatch.setattr('backend.app.main.generate_followup_question_openai', fake_followup)

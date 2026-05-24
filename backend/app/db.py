@@ -9,6 +9,7 @@ MIGRATION_0001 = "0001_initial_schema"
 MIGRATION_0002 = "0002_session_lifecycle"
 MIGRATION_0003 = "0003_transcripts"
 MIGRATION_0004 = "0004_memory_facts"
+MIGRATION_0005 = "0005_skill_hints"
 
 MIGRATION_0001_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -47,6 +48,16 @@ CREATE TABLE IF NOT EXISTS debrief_memory_facts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
     fact_text TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(session_id) REFERENCES debrief_sessions(session_id)
+);
+"""
+
+MIGRATION_0005_SQL = """
+CREATE TABLE IF NOT EXISTS debrief_skill_hints (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    hint_text TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY(session_id) REFERENCES debrief_sessions(session_id)
 );
@@ -98,6 +109,15 @@ def init_sqlite(sqlite_db_path: str | Path) -> Path:
             VALUES (?)
             """,
             (MIGRATION_0004,),
+        )
+
+        conn.executescript(MIGRATION_0005_SQL)
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO schema_migrations (migration_name)
+            VALUES (?)
+            """,
+            (MIGRATION_0005,),
         )
         conn.commit()
 
@@ -238,6 +258,38 @@ def get_session_memory_facts(sqlite_db_path: str | Path, session_id: str, limit:
             """
             SELECT fact_text
             FROM debrief_memory_facts
+            WHERE session_id=?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (session_id, limit),
+        ).fetchall()
+
+    return [r[0] for r in reversed(rows)]
+
+
+def save_skill_hints(sqlite_db_path: str | Path, session_id: str, hints: list[str]) -> None:
+    clean_hints = [h.strip() for h in hints if str(h).strip()]
+    if not clean_hints:
+        return
+
+    with sqlite3.connect(sqlite_db_path) as conn:
+        conn.executemany(
+            """
+            INSERT INTO debrief_skill_hints (session_id, hint_text)
+            VALUES (?, ?)
+            """,
+            [(session_id, hint) for hint in clean_hints],
+        )
+        conn.commit()
+
+
+def get_session_skill_hints(sqlite_db_path: str | Path, session_id: str, limit: int = 20) -> list[str]:
+    with sqlite3.connect(sqlite_db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT hint_text
+            FROM debrief_skill_hints
             WHERE session_id=?
             ORDER BY id DESC
             LIMIT ?
