@@ -17,3 +17,9 @@ class AudioUploadResponse(BaseModel):
     upload_id: str
     filename: str
     bytes_received: int
+
+
+class FollowUpQuestionResponse(BaseModel):
+    session_id: str
+    follow_up_question: str
+    llm_model: str

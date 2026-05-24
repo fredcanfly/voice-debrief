@@ -8,13 +8,15 @@ from pydantic import BaseModel
 
 from .db import (
     create_session,
+    get_latest_transcript,
     get_session,
     init_sqlite,
     save_transcript,
     set_session_ended,
     set_session_started,
 )
-from .models import AudioUploadResponse, SessionCreateResponse, SessionStatusResponse
+from .llm_openai import OpenAIFollowupError, generate_followup_question_openai
+from .models import AudioUploadResponse, FollowUpQuestionResponse, SessionCreateResponse, SessionStatusResponse
 from .stt_openai import OpenAITranscriptionError, transcribe_file_openai
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -113,6 +115,28 @@ def create_app() -> FastAPI:
             "stt_model": result.get("model"),
             "bytes_received": len(payload),
         }
+
+    @app.post("/api/debrief/sessions/{session_id}/follow-up-question", response_model=FollowUpQuestionResponse)
+    async def generate_followup_question(session_id: str) -> FollowUpQuestionResponse:
+        try:
+            _ = get_session(DB_PATH, session_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="session not found")
+
+        latest = get_latest_transcript(DB_PATH, session_id)
+        if not latest or not str(latest.get("transcript_text") or "").strip():
+            raise HTTPException(status_code=400, detail="No transcript available for this session")
+
+        try:
+            result = generate_followup_question_openai(transcript_text=str(latest["transcript_text"]))
+        except OpenAIFollowupError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        return FollowUpQuestionResponse(
+            session_id=session_id,
+            follow_up_question=result["question"],
+            llm_model=result["model"],
+        )
 
     return app
 

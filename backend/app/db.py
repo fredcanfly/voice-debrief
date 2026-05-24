@@ -153,3 +153,26 @@ def get_session(sqlite_db_path: str | Path, session_id: str) -> dict[str, str | 
     if row is None:
         raise ValueError("session not found")
     return {"session_id": row[0], "status": row[1], "started_at": row[2], "ended_at": row[3]}
+
+
+def get_latest_transcript(sqlite_db_path: str | Path, session_id: str) -> dict[str, str | None] | None:
+    with sqlite3.connect(sqlite_db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT transcript_text, stt_model, created_at
+            FROM debrief_transcripts
+            WHERE session_id=?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (session_id,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    return {
+        "transcript_text": row[0],
+        "stt_model": row[1],
+        "created_at": row[2],
+    }
