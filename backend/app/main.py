@@ -1,16 +1,18 @@
 from pathlib import Path
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .db import create_session, get_session, init_sqlite, set_session_ended, set_session_started
-from .models import SessionCreateResponse, SessionStatusResponse
+from .models import AudioUploadResponse, SessionCreateResponse, SessionStatusResponse
 
 ROOT = Path(__file__).resolve().parents[2]
 PWA_DIR = ROOT / "frontend" / "pwa"
 DB_PATH = ROOT / "data" / "voice_debrief.sqlite3"
+UPLOADS_DIR = ROOT / "data" / "uploads"
 
 
 class SessionCreateRequest(BaseModel):
@@ -20,6 +22,7 @@ class SessionCreateRequest(BaseModel):
 def create_app() -> FastAPI:
     app = FastAPI(title="Voice Debrief Assistant API")
     init_sqlite(DB_PATH)
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
     app.mount("/pwa", StaticFiles(directory=str(PWA_DIR)), name="pwa")
 
@@ -62,6 +65,19 @@ def create_app() -> FastAPI:
             status=str(session["status"]),
             started_at=session["started_at"],
             ended_at=session["ended_at"],
+        )
+
+    @app.post("/api/debrief/audio-upload", response_model=AudioUploadResponse)
+    async def upload_debrief_audio(file: UploadFile = File(...)) -> AudioUploadResponse:
+        upload_id = uuid4().hex[:16]
+        suffix = Path(file.filename or "audio.webm").suffix or ".webm"
+        target = UPLOADS_DIR / f"{upload_id}{suffix}"
+        payload = await file.read()
+        target.write_bytes(payload)
+        return AudioUploadResponse(
+            upload_id=upload_id,
+            filename=target.name,
+            bytes_received=len(payload),
         )
 
     return app

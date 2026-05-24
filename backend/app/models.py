@@ -11,3 +11,9 @@ class SessionStatusResponse(BaseModel):
     status: str
     started_at: str | None = None
     ended_at: str | None = None
+
+
+class AudioUploadResponse(BaseModel):
+    upload_id: str
+    filename: str
+    bytes_received: int

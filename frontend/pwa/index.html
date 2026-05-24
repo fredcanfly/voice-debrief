@@ -5,36 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Voice Debrief Assistant</title>
     <style>
-      body {
-        margin: 0;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        background: #0f172a;
-        color: #e2e8f0;
-      }
-      main {
-        min-height: 100dvh;
-        display: grid;
-        place-items: center;
-        padding: 1.25rem;
-        text-align: center;
-      }
-      .card {
-        width: min(540px, 100%);
-        background: #111827;
-        border: 1px solid #334155;
-        border-radius: 14px;
-        padding: 1.25rem;
-      }
-      h1 { margin: 0 0 .5rem; font-size: 1.3rem; }
-      p { margin: 0; color: #cbd5e1; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0f172a; color: #e2e8f0; }
+      main { min-height: 100dvh; display: grid; place-items: center; padding: 1.25rem; }
+      .card { width: min(560px, 100%); background: #111827; border: 1px solid #334155; border-radius: 14px; padding: 1.25rem; }
+      h1 { margin: 0 0 .75rem; font-size: 1.3rem; }
+      p { margin: .4rem 0; color: #cbd5e1; }
+      .row { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .9rem; }
+      button { border: 1px solid #475569; background: #1e293b; color: #e2e8f0; border-radius: 10px; padding: .65rem .9rem; }
+      .hint { font-size: .9rem; color: #94a3b8; }
+      .ok { color: #86efac; }
+      .err { color: #fca5a5; }
     </style>
   </head>
   <body>
     <main>
       <section class="card">
         <h1>Voice Debrief Assistant</h1>
-        <p>PWA shell served by FastAPI for pre-alpha.</p>
+        <p class="hint">P1-02: Capture and upload recorded audio from PWA to backend.</p>
+        <div class="row">
+          <button id="recordBtn" type="button">Start Recording</button>
+          <button id="stopBtn" type="button" disabled>Stop & Upload</button>
+        </div>
+        <p id="status">Ready.</p>
+        <p id="result" class="hint"></p>
       </section>
     </main>
+    <script src="/pwa/app.js"></script>
   </body>
 </html>
