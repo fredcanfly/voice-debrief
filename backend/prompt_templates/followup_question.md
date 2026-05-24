@@ -13,5 +13,8 @@ Known stable context facts:
 Behavioral skill hints:
 {skill_context}
 
+Tone guidance:
+{tone_guidance}
+
 Transcript:
 {transcript_text}

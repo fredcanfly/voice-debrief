@@ -44,11 +44,17 @@ def generate_followup_question_openai(
     hints = [f"- {item.strip()}" for item in (skill_hints or []) if str(item).strip()]
     skill_context = "\n".join(hints) if hints else "- none"
 
+    tone_guidance = ""
+    combined_hints = " ".join((skill_hints or [])).lower()
+    if "sensitive topic handling" in combined_hints or "sensitive" in combined_hints:
+        tone_guidance = "Sensitive-mode: start gently, avoid direct probing, and use emotionally-safe wording."
+
     prompt = render_prompt(
         'followup_question',
         transcript_text=transcript_text.strip(),
         memory_context=memory_context,
         skill_context=skill_context,
+        tone_guidance=tone_guidance,
     )
 
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
