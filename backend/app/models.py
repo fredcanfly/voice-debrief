@@ -23,3 +23,11 @@ class FollowUpQuestionResponse(BaseModel):
     session_id: str
     follow_up_question: str
     llm_model: str
+
+
+class FollowUpAudioResponse(BaseModel):
+    session_id: str
+    follow_up_question: str
+    llm_model: str
+    tts_provider: str
+    audio_url: str

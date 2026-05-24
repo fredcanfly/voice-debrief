@@ -16,13 +16,15 @@ from .db import (
     set_session_started,
 )
 from .llm_openai import OpenAIFollowupError, generate_followup_question_openai
-from .models import AudioUploadResponse, FollowUpQuestionResponse, SessionCreateResponse, SessionStatusResponse
+from .models import AudioUploadResponse, FollowUpAudioResponse, FollowUpQuestionResponse, SessionCreateResponse, SessionStatusResponse
 from .stt_openai import OpenAITranscriptionError, transcribe_file_openai
+from .tts_kokoro import KokoroTTSError, synthesize_kokoro_tts
 
 ROOT = Path(__file__).resolve().parents[2]
 PWA_DIR = ROOT / "frontend" / "pwa"
 DB_PATH = ROOT / "data" / "voice_debrief.sqlite3"
 UPLOADS_DIR = ROOT / "data" / "uploads"
+AUDIO_DIR = ROOT / "data" / "audio"
 
 
 class SessionCreateRequest(BaseModel):
@@ -33,8 +35,10 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Voice Debrief Assistant API")
     init_sqlite(DB_PATH)
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
     app.mount("/pwa", StaticFiles(directory=str(PWA_DIR)), name="pwa")
+    app.mount("/audio", StaticFiles(directory=str(AUDIO_DIR)), name="audio")
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -136,6 +140,33 @@ def create_app() -> FastAPI:
             session_id=session_id,
             follow_up_question=result["question"],
             llm_model=result["model"],
+        )
+
+    @app.post("/api/debrief/sessions/{session_id}/follow-up-audio", response_model=FollowUpAudioResponse)
+    async def generate_followup_audio(session_id: str) -> FollowUpAudioResponse:
+        try:
+            _ = get_session(DB_PATH, session_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="session not found")
+
+        latest = get_latest_transcript(DB_PATH, session_id)
+        if not latest or not str(latest.get("transcript_text") or "").strip():
+            raise HTTPException(status_code=400, detail="No transcript available for this session")
+
+        try:
+            llm_result = generate_followup_question_openai(transcript_text=str(latest["transcript_text"]))
+            audio_path = synthesize_kokoro_tts(text=llm_result["question"])
+        except OpenAIFollowupError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except KokoroTTSError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        return FollowUpAudioResponse(
+            session_id=session_id,
+            follow_up_question=llm_result["question"],
+            llm_model=llm_result["model"],
+            tts_provider="kokoro",
+            audio_url=f"/audio/{audio_path.name}",
         )
 
     return app
