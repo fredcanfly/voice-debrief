@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from fastapi import Header, HTTPException
+from fastapi import HTTPException
 
 from .config import Settings
+from .supabase_gateway import SupabaseGateway
 
 
 @dataclass
@@ -18,21 +19,20 @@ def parse_allowed_emails(raw: str) -> set[str]:
     return {part.strip().lower() for part in raw.split(',') if part.strip()}
 
 
-def auth_user_from_headers(
+def supabase_configured(settings: Settings) -> bool:
+    return not settings.supabase_url.startswith('https://YOUR_PROJECT')
+
+
+async def resolve_auth_user(
     settings: Settings,
+    gateway: SupabaseGateway,
     authorization: str | None,
     x_dev_user_id: str | None,
     x_dev_user_email: str | None,
 ) -> AuthUser:
-    """Scaffolding auth path.
-
-    - local mode: accepts optional X-Dev-User-Id header and defaults to 'local-bob'.
-    - multi-user mode: requires Bearer token OR dev header override while Supabase is not wired yet.
-    """
     if not settings.multi_user_mode:
         return AuthUser(user_id=x_dev_user_id or 'local-bob', email=x_dev_user_email)
 
-    # Temporary scaffolding path before JWT verification is wired.
     if x_dev_user_id:
         return AuthUser(user_id=x_dev_user_id, email=x_dev_user_email)
 
@@ -43,17 +43,15 @@ def auth_user_from_headers(
     if not token:
         raise HTTPException(status_code=401, detail='Empty Bearer token')
 
-    if settings.supabase_url.startswith('https://YOUR_PROJECT'):
-        raise HTTPException(
-            status_code=503,
-            detail='Supabase is not configured yet. Set SUPABASE_URL and keys, or use X-Dev-User-Id for scaffolding.',
-        )
+    if not supabase_configured(settings):
+        raise HTTPException(status_code=503, detail='Supabase is not configured yet')
 
-    # TODO: verify JWT against Supabase JWKS.
-    raise HTTPException(
-        status_code=501,
-        detail='JWT verification scaffolding only. Configure Supabase + add JWKS verification next.',
-    )
+    try:
+        user_data = await gateway.get_user_from_bearer(token)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=f'Invalid auth token: {exc}') from exc
+
+    return AuthUser(user_id=str(user_data.get('id')), email=user_data.get('email'))
 
 
 def can_signup(

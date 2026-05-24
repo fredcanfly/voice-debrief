@@ -12,11 +12,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .beta_auth import AuthUser, auth_user_from_headers, can_signup
+from .beta_auth import AuthUser, can_signup, resolve_auth_user, supabase_configured
 from .config import get_settings
 from .hermes_client import HermesClient
 from .session_store import DebriefSessionStore
 from .stt_local import LocalWhisperSTT
+from .supabase_gateway import SupabaseGateway
 from .tts_edge import EdgeTTS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,6 +51,11 @@ hermes = HermesClient(settings)
 tts = EdgeTTS(settings.edge_tts_voice, AUDIO_DIR)
 stt = LocalWhisperSTT(settings)
 session_store = DebriefSessionStore(DATA_DIR, debrief_dir=settings.debrief_output_dir)
+supabase = SupabaseGateway(
+    url=settings.supabase_url,
+    anon_key=settings.supabase_anon_key,
+    service_role_key=settings.supabase_service_role_key,
+)
 
 DEFAULT_ENDPOINT_THRESHOLDS = {
     'endpoint_min_speech_seconds': 0.55,
@@ -89,12 +95,12 @@ def _write_json_file(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
 
 
-def _get_auth_user(
+async def _get_auth_user(
     authorization: str | None = Header(default=None),
     x_dev_user_id: str | None = Header(default=None),
     x_dev_user_email: str | None = Header(default=None),
 ) -> AuthUser:
-    return auth_user_from_headers(settings, authorization, x_dev_user_id, x_dev_user_email)
+    return await resolve_auth_user(settings, supabase, authorization, x_dev_user_id, x_dev_user_email)
 
 
 def _default_user_settings() -> dict:
@@ -188,20 +194,39 @@ class UserSettingsUpdate(BaseModel):
 
 
 @app.get('/api/beta/can-signup')
-async def beta_can_signup(email: str | None = None, user: AuthUser = Depends(_get_auth_user)):
-    profiles = _read_json_file(BETA_PROFILES_PATH, {'users': []})
-    existing_ids = [row.get('user_id', '') for row in profiles.get('users', []) if row.get('user_id')]
+async def beta_can_signup(email: str | None = None):
+    if supabase_configured(settings) and settings.multi_user_mode:
+        count = await supabase.count_profiles()
+        existing_ids = [str(i) for i in range(count)]
+    else:
+        profiles = _read_json_file(BETA_PROFILES_PATH, {'users': []})
+        existing_ids = [row.get('user_id', '') for row in profiles.get('users', []) if row.get('user_id')]
+
     allowed, reason = can_signup(
         settings=settings,
         existing_user_ids=existing_ids,
-        email=email or user.email,
-        requesting_user_id=user.user_id,
+        email=email,
+        requesting_user_id=None,
     )
     return {'allowed': allowed, 'reason': reason, 'max_beta_users': settings.max_beta_users}
 
 
 @app.get('/api/me/settings')
 async def get_my_settings(user: AuthUser = Depends(_get_auth_user)):
+    if supabase_configured(settings) and settings.multi_user_mode:
+        row = await supabase.get_user_settings(user_id=user.user_id)
+        if row:
+            payload = {
+                'voice_name': row.get('voice_name', settings.edge_tts_voice),
+                'endpoint_min_speech_seconds': row.get('endpoint_min_speech_seconds', settings.endpoint_min_speech_seconds),
+                'endpoint_min_text_chars': row.get('endpoint_min_text_chars', settings.endpoint_min_text_chars),
+                'vad_silence_ms': row.get('vad_silence_ms', settings.whisper_vad_min_silence_ms),
+                'setup_complete': row.get('setup_complete', False),
+            }
+        else:
+            payload = _default_user_settings()
+        return {'user_id': user.user_id, 'settings': payload}
+
     data = _read_json_file(USER_SETTINGS_PATH, {'users': {}})
     users = data.get('users', {})
     payload = users.get(user.user_id) or _default_user_settings()
@@ -210,9 +235,7 @@ async def get_my_settings(user: AuthUser = Depends(_get_auth_user)):
 
 @app.post('/api/me/settings')
 async def update_my_settings(req: UserSettingsUpdate, user: AuthUser = Depends(_get_auth_user)):
-    data = _read_json_file(USER_SETTINGS_PATH, {'users': {}})
-    users = data.setdefault('users', {})
-    current = users.get(user.user_id) or _default_user_settings()
+    current = _default_user_settings()
 
     if req.voice_name is not None:
         current['voice_name'] = req.voice_name
@@ -225,6 +248,13 @@ async def update_my_settings(req: UserSettingsUpdate, user: AuthUser = Depends(_
     if req.setup_complete is not None:
         current['setup_complete'] = bool(req.setup_complete)
 
+    if supabase_configured(settings) and settings.multi_user_mode:
+        await supabase.ensure_profile(user_id=user.user_id, email=user.email)
+        saved = await supabase.upsert_user_settings(user_id=user.user_id, settings_payload=current)
+        return {'user_id': user.user_id, 'settings': saved}
+
+    data = _read_json_file(USER_SETTINGS_PATH, {'users': {}})
+    users = data.setdefault('users', {})
     users[user.user_id] = current
     _write_json_file(USER_SETTINGS_PATH, data)
 
