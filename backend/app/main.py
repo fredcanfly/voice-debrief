@@ -1,4 +1,6 @@
+import csv
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -50,6 +52,14 @@ class SessionCreateRequest(BaseModel):
     session_id: str | None = None
 
 
+class FeedbackEntryRequest(BaseModel):
+    user_id: str
+    trust_score: int
+    cognitive_load_score: int
+    notes: str = ''
+    next_changes: str = ''
+
+
 def _request_user_id(x_user_id: str | None) -> str:
     return (x_user_id or 'local-bob').strip() or 'local-bob'
 
@@ -84,6 +94,35 @@ def create_app() -> FastAPI:
     async def usage_summary(x_admin_key: str | None = Header(default=None)) -> dict:
         _assert_admin(x_admin_key)
         return {'totals': get_usage_totals(DB_PATH)}
+
+    @app.post('/api/admin/feedback-entry')
+    async def ingest_feedback_entry(
+        req: FeedbackEntryRequest,
+        x_admin_key: str | None = Header(default=None),
+    ) -> dict:
+        _assert_admin(x_admin_key)
+        if not (1 <= req.trust_score <= 5 and 1 <= req.cognitive_load_score <= 5):
+            raise HTTPException(status_code=400, detail='Scores must be 1-5')
+
+        log_path = Path(os.getenv('FEEDBACK_LOG_PATH', str(ROOT / 'docs' / 'validation' / 'feedback_log.csv')))
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        if not log_path.exists():
+            log_path.write_text('timestamp_utc,user_id,trust_score,cognitive_load_score,notes,next_changes\n', encoding='utf-8')
+
+        timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        with log_path.open('a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                timestamp,
+                req.user_id,
+                req.trust_score,
+                req.cognitive_load_score,
+                req.notes,
+                req.next_changes,
+            ])
+
+        log_usage_event(DB_PATH, event_type='feedback_received', user_id=req.user_id)
+        return {'ok': True, 'log_path': str(log_path), 'timestamp_utc': timestamp}
 
     @app.get("/")
     async def pwa_shell() -> FileResponse:
