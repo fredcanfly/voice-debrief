@@ -81,6 +81,27 @@ def _assert_admin(x_admin_key: str | None) -> None:
         raise HTTPException(status_code=401, detail='Invalid admin key')
 
 
+def _read_recent_feedback(limit: int = 20) -> list[dict]:
+    log_path = Path(os.getenv('FEEDBACK_LOG_PATH', str(ROOT / 'docs' / 'validation' / 'feedback_log.csv')))
+    if not log_path.exists():
+        return []
+
+    rows: list[dict] = []
+    with log_path.open('r', newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rows.append({
+                'timestamp_utc': row.get('timestamp_utc', ''),
+                'user_id': row.get('user_id', ''),
+                'trust_score': int(row.get('trust_score') or 0),
+                'cognitive_load_score': int(row.get('cognitive_load_score') or 0),
+                'notes': row.get('notes', ''),
+                'next_changes': row.get('next_changes', ''),
+            })
+
+    return rows[-limit:]
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Voice Debrief Assistant API")
     init_sqlite(DB_PATH)
@@ -138,6 +159,14 @@ def create_app() -> FastAPI:
         output_path = req.output_path or str(ROOT / 'docs' / 'validation' / 'weekly_usage_latest.md')
         report_path = generate_weekly_usage_summary(DB_PATH, output_path)
         return {'ok': True, 'output_path': str(report_path)}
+
+    @app.get('/api/admin/pilot-snapshot')
+    async def admin_pilot_snapshot(x_admin_key: str | None = Header(default=None)) -> dict:
+        _assert_admin(x_admin_key)
+        return {
+            'usage_totals': get_usage_totals(DB_PATH),
+            'recent_feedback': _read_recent_feedback(limit=20),
+        }
 
     @app.get("/")
     async def pwa_shell() -> FileResponse:
