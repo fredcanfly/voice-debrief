@@ -65,6 +65,10 @@ class WeeklyUsageReportRequest(BaseModel):
     output_path: str | None = None
 
 
+class TrustBacklogRequest(BaseModel):
+    output_path: str | None = None
+
+
 def _request_user_id(x_user_id: str | None) -> str:
     return (x_user_id or 'local-bob').strip() or 'local-bob'
 
@@ -100,6 +104,29 @@ def _read_recent_feedback(limit: int = 20) -> list[dict]:
             })
 
     return rows[-limit:]
+
+
+def _generate_trust_backlog(output_path: str | Path, feedback_rows: list[dict]) -> Path:
+    target = Path(output_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    lines = ['# Trust Backlog (Auto-generated)', '']
+    if not feedback_rows:
+        lines.append('- No feedback rows available yet.')
+    else:
+        for idx, row in enumerate(feedback_rows, start=1):
+            next_change = str(row.get('next_changes', '')).strip() or 'Review note details'
+            trust = int(row.get('trust_score') or 0)
+            cog = int(row.get('cognitive_load_score') or 0)
+            lines.append(f"## Item {idx}: {next_change}")
+            lines.append(f"- Source user: {row.get('user_id', '')}")
+            lines.append(f"- Trust score: {trust}/5")
+            lines.append(f"- Cognitive-load score: {cog}/5")
+            lines.append(f"- Notes: {row.get('notes', '')}")
+            lines.append('')
+
+    target.write_text('\n'.join(lines).strip() + '\n', encoding='utf-8')
+    return target
 
 
 def create_app() -> FastAPI:
@@ -167,6 +194,16 @@ def create_app() -> FastAPI:
             'usage_totals': get_usage_totals(DB_PATH),
             'recent_feedback': _read_recent_feedback(limit=20),
         }
+
+    @app.post('/api/admin/generate-trust-backlog')
+    async def admin_generate_trust_backlog(
+        req: TrustBacklogRequest,
+        x_admin_key: str | None = Header(default=None),
+    ) -> dict:
+        _assert_admin(x_admin_key)
+        output_path = req.output_path or str(ROOT / 'docs' / 'validation' / 'trust_backlog_latest.md')
+        backlog_path = _generate_trust_backlog(output_path, _read_recent_feedback(limit=100))
+        return {'ok': True, 'output_path': str(backlog_path)}
 
     @app.get("/")
     async def pwa_shell() -> FileResponse:
