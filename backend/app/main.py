@@ -37,6 +37,7 @@ from .models import (
     SessionCreateResponse,
     SessionStatusResponse,
 )
+from .usage_reports import generate_weekly_usage_summary
 from .stt_openai import OpenAITranscriptionError, transcribe_file_openai
 from .tts_kokoro import KokoroTTSError, synthesize_kokoro_tts
 
@@ -58,6 +59,10 @@ class FeedbackEntryRequest(BaseModel):
     cognitive_load_score: int
     notes: str = ''
     next_changes: str = ''
+
+
+class WeeklyUsageReportRequest(BaseModel):
+    output_path: str | None = None
 
 
 def _request_user_id(x_user_id: str | None) -> str:
@@ -123,6 +128,16 @@ def create_app() -> FastAPI:
 
         log_usage_event(DB_PATH, event_type='feedback_received', user_id=req.user_id)
         return {'ok': True, 'log_path': str(log_path), 'timestamp_utc': timestamp}
+
+    @app.post('/api/admin/weekly-usage-report')
+    async def admin_weekly_usage_report(
+        req: WeeklyUsageReportRequest,
+        x_admin_key: str | None = Header(default=None),
+    ) -> dict:
+        _assert_admin(x_admin_key)
+        output_path = req.output_path or str(ROOT / 'docs' / 'validation' / 'weekly_usage_latest.md')
+        report_path = generate_weekly_usage_summary(DB_PATH, output_path)
+        return {'ok': True, 'output_path': str(report_path)}
 
     @app.get("/")
     async def pwa_shell() -> FileResponse:
