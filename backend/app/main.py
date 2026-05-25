@@ -257,7 +257,9 @@ def create_app() -> FastAPI:
         except OpenAIDebriefError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 
-        doc_path = GENERATED_DOCS_DIR / f"{session_id}-{result['slug']}.md"
+        user_docs_dir = GENERATED_DOCS_DIR / user_id
+        user_docs_dir.mkdir(parents=True, exist_ok=True)
+        doc_path = user_docs_dir / f"{session_id}-{result['slug']}.md"
         doc_path.write_text(result["markdown"], encoding="utf-8")
 
         return DebriefDocumentResponse(
@@ -280,8 +282,9 @@ def create_app() -> FastAPI:
         except ValueError:
             raise HTTPException(status_code=404, detail="session not found")
 
+        user_docs_dir = GENERATED_DOCS_DIR / user_id
         candidates = sorted(
-            GENERATED_DOCS_DIR.glob(f"{session_id}-*.md"),
+            user_docs_dir.glob(f"{session_id}-*.md"),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
