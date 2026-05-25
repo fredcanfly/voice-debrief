@@ -1,7 +1,7 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -47,6 +47,16 @@ class SessionCreateRequest(BaseModel):
     session_id: str | None = None
 
 
+def _request_user_id(x_user_id: str | None) -> str:
+    return (x_user_id or 'local-bob').strip() or 'local-bob'
+
+
+def _assert_owner(session: dict[str, str | None], user_id: str) -> None:
+    owner = str(session.get('owner_user_id') or 'local-bob')
+    if owner != user_id:
+        raise HTTPException(status_code=403, detail='Not your session')
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Voice Debrief Assistant API")
     init_sqlite(DB_PATH)
@@ -66,13 +76,16 @@ def create_app() -> FastAPI:
         return FileResponse(PWA_DIR / "index.html")
 
     @app.post("/api/debrief/sessions", response_model=SessionCreateResponse)
-    async def create_debrief_session(req: SessionCreateRequest) -> SessionCreateResponse:
-        sid = create_session(DB_PATH, req.session_id)
+    async def create_debrief_session(req: SessionCreateRequest, x_user_id: str | None = Header(default=None)) -> SessionCreateResponse:
+        sid = create_session(DB_PATH, req.session_id, owner_user_id=_request_user_id(x_user_id))
         return SessionCreateResponse(session_id=sid, status="created")
 
     @app.post("/api/debrief/sessions/{session_id}/start", response_model=SessionStatusResponse)
-    async def start_debrief_session(session_id: str) -> SessionStatusResponse:
+    async def start_debrief_session(session_id: str, x_user_id: str | None = Header(default=None)) -> SessionStatusResponse:
+        user_id = _request_user_id(x_user_id)
         try:
+            session = get_session(DB_PATH, session_id)
+            _assert_owner(session, user_id)
             set_session_started(DB_PATH, session_id)
             session = get_session(DB_PATH, session_id)
         except ValueError:
@@ -85,8 +98,11 @@ def create_app() -> FastAPI:
         )
 
     @app.post("/api/debrief/sessions/{session_id}/end", response_model=SessionStatusResponse)
-    async def end_debrief_session(session_id: str) -> SessionStatusResponse:
+    async def end_debrief_session(session_id: str, x_user_id: str | None = Header(default=None)) -> SessionStatusResponse:
+        user_id = _request_user_id(x_user_id)
         try:
+            session = get_session(DB_PATH, session_id)
+            _assert_owner(session, user_id)
             set_session_ended(DB_PATH, session_id)
             session = get_session(DB_PATH, session_id)
         except ValueError:
@@ -112,9 +128,15 @@ def create_app() -> FastAPI:
         )
 
     @app.post("/api/debrief/sessions/{session_id}/transcribe")
-    async def transcribe_session_audio(session_id: str, file: UploadFile = File(...)) -> dict:
+    async def transcribe_session_audio(
+        session_id: str,
+        file: UploadFile = File(...),
+        x_user_id: str | None = Header(default=None),
+    ) -> dict:
+        user_id = _request_user_id(x_user_id)
         try:
-            _ = get_session(DB_PATH, session_id)
+            session = get_session(DB_PATH, session_id)
+            _assert_owner(session, user_id)
         except ValueError:
             raise HTTPException(status_code=404, detail="session not found")
 
@@ -142,9 +164,14 @@ def create_app() -> FastAPI:
         }
 
     @app.post("/api/debrief/sessions/{session_id}/follow-up-question", response_model=FollowUpQuestionResponse)
-    async def generate_followup_question(session_id: str) -> FollowUpQuestionResponse:
+    async def generate_followup_question(
+        session_id: str,
+        x_user_id: str | None = Header(default=None),
+    ) -> FollowUpQuestionResponse:
+        user_id = _request_user_id(x_user_id)
         try:
-            _ = get_session(DB_PATH, session_id)
+            session = get_session(DB_PATH, session_id)
+            _assert_owner(session, user_id)
         except ValueError:
             raise HTTPException(status_code=404, detail="session not found")
 
@@ -168,9 +195,14 @@ def create_app() -> FastAPI:
         )
 
     @app.post("/api/debrief/sessions/{session_id}/follow-up-audio", response_model=FollowUpAudioResponse)
-    async def generate_followup_audio(session_id: str) -> FollowUpAudioResponse:
+    async def generate_followup_audio(
+        session_id: str,
+        x_user_id: str | None = Header(default=None),
+    ) -> FollowUpAudioResponse:
+        user_id = _request_user_id(x_user_id)
         try:
-            _ = get_session(DB_PATH, session_id)
+            session = get_session(DB_PATH, session_id)
+            _assert_owner(session, user_id)
         except ValueError:
             raise HTTPException(status_code=404, detail="session not found")
 
@@ -199,9 +231,14 @@ def create_app() -> FastAPI:
         )
 
     @app.post("/api/debrief/sessions/{session_id}/generate-document", response_model=DebriefDocumentResponse)
-    async def generate_debrief_document(session_id: str) -> DebriefDocumentResponse:
+    async def generate_debrief_document(
+        session_id: str,
+        x_user_id: str | None = Header(default=None),
+    ) -> DebriefDocumentResponse:
+        user_id = _request_user_id(x_user_id)
         try:
-            _ = get_session(DB_PATH, session_id)
+            session = get_session(DB_PATH, session_id)
+            _assert_owner(session, user_id)
         except ValueError:
             raise HTTPException(status_code=404, detail="session not found")
 
@@ -232,9 +269,14 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/api/debrief/sessions/{session_id}/document-download")
-    async def download_debrief_document(session_id: str) -> FileResponse:
+    async def download_debrief_document(
+        session_id: str,
+        x_user_id: str | None = Header(default=None),
+    ) -> FileResponse:
+        user_id = _request_user_id(x_user_id)
         try:
-            _ = get_session(DB_PATH, session_id)
+            session = get_session(DB_PATH, session_id)
+            _assert_owner(session, user_id)
         except ValueError:
             raise HTTPException(status_code=404, detail="session not found")
 

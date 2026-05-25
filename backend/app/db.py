@@ -10,6 +10,7 @@ MIGRATION_0002 = "0002_session_lifecycle"
 MIGRATION_0003 = "0003_transcripts"
 MIGRATION_0004 = "0004_memory_facts"
 MIGRATION_0005 = "0005_skill_hints"
+MIGRATION_0006 = "0006_session_ownership"
 
 MIGRATION_0001_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -30,6 +31,10 @@ MIGRATION_0002_SQL = """
 ALTER TABLE debrief_sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'created';
 ALTER TABLE debrief_sessions ADD COLUMN started_at TEXT;
 ALTER TABLE debrief_sessions ADD COLUMN ended_at TEXT;
+"""
+
+MIGRATION_0006_SQL = """
+ALTER TABLE debrief_sessions ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT 'local-bob';
 """
 
 MIGRATION_0003_SQL = """
@@ -119,20 +124,30 @@ def init_sqlite(sqlite_db_path: str | Path) -> Path:
             """,
             (MIGRATION_0005,),
         )
+
+        if not _has_column(conn, "debrief_sessions", "owner_user_id"):
+            conn.executescript(MIGRATION_0006_SQL)
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO schema_migrations (migration_name)
+            VALUES (?)
+            """,
+            (MIGRATION_0006,),
+        )
         conn.commit()
 
     return db_path
 
 
-def create_session(sqlite_db_path: str | Path, session_id: str | None = None) -> str:
+def create_session(sqlite_db_path: str | Path, session_id: str | None = None, owner_user_id: str = 'local-bob') -> str:
     sid = session_id or f"debrief-{uuid4().hex[:12]}"
     with sqlite3.connect(sqlite_db_path) as conn:
         conn.execute(
             """
-            INSERT INTO debrief_sessions (session_id, status)
-            VALUES (?, 'created')
+            INSERT INTO debrief_sessions (session_id, status, owner_user_id)
+            VALUES (?, 'created', ?)
             """,
-            (sid,),
+            (sid, owner_user_id),
         )
         conn.commit()
     return sid
@@ -184,7 +199,7 @@ def get_session(sqlite_db_path: str | Path, session_id: str) -> dict[str, str | 
     with sqlite3.connect(sqlite_db_path) as conn:
         row = conn.execute(
             """
-            SELECT session_id, status, started_at, ended_at
+            SELECT session_id, status, started_at, ended_at, owner_user_id
             FROM debrief_sessions
             WHERE session_id=?
             """,
@@ -192,7 +207,13 @@ def get_session(sqlite_db_path: str | Path, session_id: str) -> dict[str, str | 
         ).fetchone()
     if row is None:
         raise ValueError("session not found")
-    return {"session_id": row[0], "status": row[1], "started_at": row[2], "ended_at": row[3]}
+    return {
+        "session_id": row[0],
+        "status": row[1],
+        "started_at": row[2],
+        "ended_at": row[3],
+        "owner_user_id": row[4],
+    }
 
 
 def get_latest_transcript(sqlite_db_path: str | Path, session_id: str) -> dict[str, str | None] | None:
