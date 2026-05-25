@@ -11,6 +11,7 @@ MIGRATION_0003 = "0003_transcripts"
 MIGRATION_0004 = "0004_memory_facts"
 MIGRATION_0005 = "0005_skill_hints"
 MIGRATION_0006 = "0006_session_ownership"
+MIGRATION_0007 = "0007_usage_events"
 
 MIGRATION_0001_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -65,6 +66,16 @@ CREATE TABLE IF NOT EXISTS debrief_skill_hints (
     hint_text TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY(session_id) REFERENCES debrief_sessions(session_id)
+);
+"""
+
+MIGRATION_0007_SQL = """
+CREATE TABLE IF NOT EXISTS debrief_usage_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT,
+    user_id TEXT,
+    event_type TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 """
 
@@ -133,6 +144,15 @@ def init_sqlite(sqlite_db_path: str | Path) -> Path:
             VALUES (?)
             """,
             (MIGRATION_0006,),
+        )
+
+        conn.executescript(MIGRATION_0007_SQL)
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO schema_migrations (migration_name)
+            VALUES (?)
+            """,
+            (MIGRATION_0007,),
         )
         conn.commit()
 
@@ -319,3 +339,28 @@ def get_session_skill_hints(sqlite_db_path: str | Path, session_id: str, limit: 
         ).fetchall()
 
     return [r[0] for r in reversed(rows)]
+
+
+def log_usage_event(sqlite_db_path: str | Path, *, event_type: str, user_id: str | None = None, session_id: str | None = None) -> None:
+    with sqlite3.connect(sqlite_db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO debrief_usage_events (session_id, user_id, event_type)
+            VALUES (?, ?, ?)
+            """,
+            (session_id, user_id, event_type),
+        )
+        conn.commit()
+
+
+def get_usage_totals(sqlite_db_path: str | Path) -> dict[str, int]:
+    with sqlite3.connect(sqlite_db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT event_type, COUNT(*) as n
+            FROM debrief_usage_events
+            GROUP BY event_type
+            """
+        ).fetchall()
+
+    return {str(event): int(n) for event, n in rows}

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,7 +14,9 @@ from .db import (
     get_session_memory_facts,
     get_session_skill_hints,
     get_session_transcripts,
+    get_usage_totals,
     init_sqlite,
+    log_usage_event,
     save_memory_facts,
     save_skill_hints,
     save_transcript,
@@ -57,6 +60,12 @@ def _assert_owner(session: dict[str, str | None], user_id: str) -> None:
         raise HTTPException(status_code=403, detail='Not your session')
 
 
+def _assert_admin(x_admin_key: str | None) -> None:
+    expected = os.getenv('ADMIN_API_KEY', 'dev-admin-key')
+    if (x_admin_key or '').strip() != expected:
+        raise HTTPException(status_code=401, detail='Invalid admin key')
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Voice Debrief Assistant API")
     init_sqlite(DB_PATH)
@@ -71,13 +80,20 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok", "service": "voice-debrief-api"}
 
+    @app.get('/api/admin/usage-summary')
+    async def usage_summary(x_admin_key: str | None = Header(default=None)) -> dict:
+        _assert_admin(x_admin_key)
+        return {'totals': get_usage_totals(DB_PATH)}
+
     @app.get("/")
     async def pwa_shell() -> FileResponse:
         return FileResponse(PWA_DIR / "index.html")
 
     @app.post("/api/debrief/sessions", response_model=SessionCreateResponse)
     async def create_debrief_session(req: SessionCreateRequest, x_user_id: str | None = Header(default=None)) -> SessionCreateResponse:
-        sid = create_session(DB_PATH, req.session_id, owner_user_id=_request_user_id(x_user_id))
+        user_id = _request_user_id(x_user_id)
+        sid = create_session(DB_PATH, req.session_id, owner_user_id=user_id)
+        log_usage_event(DB_PATH, event_type='session_created', user_id=user_id, session_id=sid)
         return SessionCreateResponse(session_id=sid, status="created")
 
     @app.post("/api/debrief/sessions/{session_id}/start", response_model=SessionStatusResponse)
@@ -88,6 +104,7 @@ def create_app() -> FastAPI:
             _assert_owner(session, user_id)
             set_session_started(DB_PATH, session_id)
             session = get_session(DB_PATH, session_id)
+            log_usage_event(DB_PATH, event_type='session_started', user_id=user_id, session_id=session_id)
         except ValueError:
             raise HTTPException(status_code=404, detail="session not found")
         return SessionStatusResponse(
@@ -105,6 +122,7 @@ def create_app() -> FastAPI:
             _assert_owner(session, user_id)
             set_session_ended(DB_PATH, session_id)
             session = get_session(DB_PATH, session_id)
+            log_usage_event(DB_PATH, event_type='session_ended', user_id=user_id, session_id=session_id)
         except ValueError:
             raise HTTPException(status_code=404, detail="session not found")
         return SessionStatusResponse(
@@ -156,6 +174,7 @@ def create_app() -> FastAPI:
         save_memory_facts(DB_PATH, session_id, memory_facts)
         skill_hints = extract_skill_hints_from_transcript(result["text"])
         save_skill_hints(DB_PATH, session_id, skill_hints)
+        log_usage_event(DB_PATH, event_type='transcribe', user_id=user_id, session_id=session_id)
         return {
             "session_id": session_id,
             "transcript_text": result["text"],
@@ -185,6 +204,7 @@ def create_app() -> FastAPI:
                 memory_facts=get_session_memory_facts(DB_PATH, session_id),
                 skill_hints=get_session_skill_hints(DB_PATH, session_id),
             )
+            log_usage_event(DB_PATH, event_type='followup_question', user_id=user_id, session_id=session_id)
         except OpenAIFollowupError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 
@@ -217,6 +237,7 @@ def create_app() -> FastAPI:
                 skill_hints=get_session_skill_hints(DB_PATH, session_id),
             )
             audio_path = synthesize_kokoro_tts(text=llm_result["question"])
+            log_usage_event(DB_PATH, event_type='followup_audio', user_id=user_id, session_id=session_id)
         except OpenAIFollowupError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
         except KokoroTTSError as exc:
@@ -261,6 +282,7 @@ def create_app() -> FastAPI:
         user_docs_dir.mkdir(parents=True, exist_ok=True)
         doc_path = user_docs_dir / f"{session_id}-{result['slug']}.md"
         doc_path.write_text(result["markdown"], encoding="utf-8")
+        log_usage_event(DB_PATH, event_type='document_generated', user_id=user_id, session_id=session_id)
 
         return DebriefDocumentResponse(
             session_id=session_id,
@@ -292,6 +314,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="no generated document for this session")
 
         target = candidates[0]
+        log_usage_event(DB_PATH, event_type='document_downloaded', user_id=user_id, session_id=session_id)
         return FileResponse(path=target, media_type="text/markdown", filename=target.name)
 
     return app
