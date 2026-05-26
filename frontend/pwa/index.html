@@ -5,33 +5,132 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Voice Debrief Assistant</title>
     <style>
-      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0f172a; color: #e2e8f0; }
-      main { min-height: 100dvh; display: grid; place-items: center; padding: 1.25rem; }
-      .card { width: min(560px, 100%); background: #111827; border: 1px solid #334155; border-radius: 14px; padding: 1.25rem; }
-      h1 { margin: 0 0 .75rem; font-size: 1.3rem; }
-      p { margin: .4rem 0; color: #cbd5e1; }
-      .row { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .9rem; }
-      button { border: 1px solid #475569; background: #1e293b; color: #e2e8f0; border-radius: 10px; padding: .65rem .9rem; }
-      .hint { font-size: .9rem; color: #94a3b8; }
+      :root {
+        --bg: #0b1220;
+        --panel: #111827;
+        --panel-2: #0f172a;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --border: #334155;
+        --ok: #22c55e;
+        --ok-dark: #16a34a;
+        --stop: #ef4444;
+        --stop-dark: #dc2626;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: radial-gradient(circle at top, #13213d 0%, var(--bg) 50%);
+        color: var(--text);
+      }
+
+      main {
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+      }
+
+      .card {
+        width: min(680px, 100%);
+        background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 1rem;
+        box-shadow: 0 20px 50px rgba(2, 8, 23, .45);
+      }
+
+      .account-strip {
+        display: flex;
+        justify-content: space-between;
+        gap: .75rem;
+        background: rgba(15, 23, 42, .9);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: .75rem .9rem;
+        margin-bottom: 1rem;
+        font-size: .95rem;
+      }
+
+      .account-strip strong { color: #f8fafc; }
+      .muted { color: var(--muted); }
+
+      h1 {
+        margin: .2rem 0 .4rem;
+        font-size: clamp(1.4rem, 2.8vw, 1.9rem);
+      }
+
+      .subtitle {
+        margin: 0 0 1rem;
+        color: #cbd5e1;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: .85rem;
+      }
+
+      .btn {
+        border: none;
+        border-radius: 14px;
+        padding: 1.1rem 1rem;
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 700;
+        letter-spacing: .01em;
+        cursor: pointer;
+        transition: transform .08s ease, opacity .2s ease, filter .2s ease;
+      }
+
+      .btn:active { transform: translateY(1px); }
+      .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+      .btn-start { background: linear-gradient(180deg, var(--ok) 0%, var(--ok-dark) 100%); }
+      .btn-stop { background: linear-gradient(180deg, var(--stop) 0%, var(--stop-dark) 100%); }
+
+      .status-wrap {
+        margin-top: 1rem;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: .8rem .9rem;
+      }
+
+      #status { margin: 0; font-weight: 600; }
+      #result { margin: .35rem 0 0; font-size: .95rem; color: var(--muted); }
       .ok { color: #86efac; }
       .err { color: #fca5a5; }
+
+      @media (max-width: 560px) {
+        .controls { grid-template-columns: 1fr; }
+        .btn { min-height: 64px; font-size: 1.15rem; }
+        .account-strip { flex-direction: column; }
+      }
     </style>
   </head>
   <body>
     <main>
       <section class="card">
+        <div class="account-strip">
+          <div><span class="muted">Account:</span> <strong id="accountName">local-bob</strong></div>
+          <div><span class="muted">Status:</span> <strong>Logged in</strong></div>
+        </div>
+
         <h1>Voice Debrief Assistant</h1>
-        <p class="hint">P1-07: Capture/upload, then download generated debrief markdown.</p>
-        <div class="row">
-          <input id="sessionId" type="text" placeholder="session id (optional)" style="flex:1; min-width:220px; border:1px solid #475569; background:#0b1220; color:#e2e8f0; border-radius:10px; padding:.65rem .9rem;" />
+        <p class="subtitle">Tap start to record. Tap stop to finish and upload.</p>
+
+        <div class="controls">
+          <button id="recordBtn" class="btn btn-start" type="button">🟢 Start</button>
+          <button id="stopBtn" class="btn btn-stop" type="button" disabled>🔴 Stop</button>
         </div>
-        <div class="row">
-          <button id="recordBtn" type="button">Start Recording</button>
-          <button id="stopBtn" type="button" disabled>Stop & Upload</button>
-          <button id="downloadBtn" type="button">Download Latest Debrief</button>
+
+        <div class="status-wrap">
+          <p id="status">Ready.</p>
+          <p id="result"></p>
         </div>
-        <p id="status">Ready.</p>
-        <p id="result" class="hint"></p>
       </section>
     </main>
     <script src="/pwa/app.js"></script>

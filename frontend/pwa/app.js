@@ -3,14 +3,25 @@ let chunks = [];
 
 const recordBtn = document.getElementById('recordBtn');
 const stopBtn = document.getElementById('stopBtn');
-const downloadBtn = document.getElementById('downloadBtn');
-const sessionIdInput = document.getElementById('sessionId');
 const statusEl = document.getElementById('status');
 const resultEl = document.getElementById('result');
+const accountNameEl = document.getElementById('accountName');
+
+const FALLBACK_USER_ID = 'local-bob';
+
+function resolveUserId() {
+  const fromStorage = (window.localStorage?.getItem('voiceDebrief.userId') || '').trim();
+  return fromStorage || FALLBACK_USER_ID;
+}
 
 function setStatus(text, cls = '') {
   statusEl.textContent = text;
   statusEl.className = cls;
+}
+
+function setAccountInfo() {
+  if (!accountNameEl) return;
+  accountNameEl.textContent = resolveUserId();
 }
 
 async function startRecording() {
@@ -36,13 +47,14 @@ async function startRecording() {
   mediaRecorder.start();
   recordBtn.disabled = true;
   stopBtn.disabled = false;
-  setStatus('Recording...');
+  setStatus('Recording…');
+  resultEl.textContent = '';
 }
 
 async function stopRecording() {
   if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
   stopBtn.disabled = true;
-  setStatus('Uploading...');
+  setStatus('Uploading…');
   mediaRecorder.stop();
 }
 
@@ -51,11 +63,13 @@ async function uploadAudio(blob) {
   form.append('file', blob, 'pwa-recording.webm');
 
   try {
-    const res = await fetch('/api/debrief/audio-upload', { method: 'POST', body: form });
+    const headers = { 'x-user-id': resolveUserId() };
+    const res = await fetch('/api/debrief/audio-upload', { method: 'POST', body: form, headers });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
+
     setStatus('Upload complete.', 'ok');
-    resultEl.textContent = `upload_id=${data.upload_id} bytes=${data.bytes_received}`;
+    resultEl.textContent = `Upload ID: ${data.upload_id} • Bytes: ${data.bytes_received}`;
   } catch (error) {
     setStatus(`Upload failed: ${error.message}`, 'err');
   } finally {
@@ -64,39 +78,12 @@ async function uploadAudio(blob) {
   }
 }
 
-async function downloadLatestDebrief() {
-  const sessionId = (sessionIdInput?.value || '').trim();
-  if (!sessionId) {
-    setStatus('Enter a session id before download.', 'err');
-    return;
-  }
+recordBtn.addEventListener('click', () => {
+  startRecording().catch((e) => setStatus(`Mic error: ${e.message}`, 'err'));
+});
 
-  try {
-    setStatus('Preparing download...');
-    const response = await fetch(`/api/debrief/sessions/${encodeURIComponent(sessionId)}/document-download`);
-    if (!response.ok) throw new Error(await response.text());
+stopBtn.addEventListener('click', () => {
+  stopRecording().catch((e) => setStatus(`Stop error: ${e.message}`, 'err'));
+});
 
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-
-    const disposition = response.headers.get('content-disposition') || '';
-    const match = disposition.match(/filename="?([^";]+)"?/i);
-    const filename = match?.[1] || `${sessionId}-debrief.md`;
-
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-
-    setStatus('Download started.', 'ok');
-  } catch (error) {
-    setStatus(`Download failed: ${error.message}`, 'err');
-  }
-}
-
-recordBtn.addEventListener('click', () => { startRecording().catch((e) => setStatus(`Mic error: ${e.message}`, 'err')); });
-stopBtn.addEventListener('click', () => { stopRecording().catch((e) => setStatus(`Stop error: ${e.message}`, 'err')); });
-downloadBtn.addEventListener('click', () => { downloadLatestDebrief().catch((e) => setStatus(`Download error: ${e.message}`, 'err')); });
+setAccountInfo();
