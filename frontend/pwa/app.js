@@ -6,11 +6,13 @@ const stopBtn = document.getElementById('stopBtn');
 const statusEl = document.getElementById('status');
 const resultEl = document.getElementById('result');
 const accountNameEl = document.getElementById('accountName');
+const logoutBtn = document.getElementById('logoutBtn');
 
+const USER_ID_KEY = 'voiceDebrief.userId';
 const FALLBACK_USER_ID = 'local-bob';
 
 function resolveUserId() {
-  const fromStorage = (window.localStorage?.getItem('voiceDebrief.userId') || '').trim();
+  const fromStorage = (window.localStorage?.getItem(USER_ID_KEY) || '').trim();
   return fromStorage || FALLBACK_USER_ID;
 }
 
@@ -87,3 +89,14 @@ stopBtn.addEventListener('click', () => {
 });
 
 setAccountInfo();
+
+if (!window.localStorage?.getItem(USER_ID_KEY)) {
+  window.location.href = '/login';
+}
+
+if (logoutBtn) {
+  logoutBtn.addEventListener('click', () => {
+    window.localStorage?.removeItem(USER_ID_KEY);
+    window.location.href = '/login';
+  });
+}

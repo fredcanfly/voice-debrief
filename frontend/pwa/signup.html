@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign up • Voice Debrief</title>
+    <style>
+      body{margin:0;font-family:Inter,system-ui;background:#0b1220;color:#e2e8f0;display:grid;place-items:center;min-height:100dvh}
+      .card{width:min(460px,100%);background:#111827;border:1px solid #334155;border-radius:16px;padding:1rem}
+      h1{margin:.2rem 0 .8rem}
+      .field{display:grid;gap:.35rem;margin:.7rem 0}
+      input{border:1px solid #475569;background:#0f172a;color:#e2e8f0;border-radius:10px;padding:.7rem}
+      button{width:100%;border:none;background:#22c55e;color:white;border-radius:12px;padding:.75rem 1rem;font-weight:700;cursor:pointer}
+      a{color:#93c5fd}
+      #msg{min-height:1.2rem;color:#94a3b8}
+      .err{color:#fca5a5}
+    </style>
+  </head>
+  <body>
+    <section class="card">
+      <h1>Create account</h1>
+      <div class="field"><label>User ID</label><input id="userId" autocomplete="username" /></div>
+      <div class="field"><label>Password (min 8 chars)</label><input id="password" type="password" autocomplete="new-password" /></div>
+      <button id="submitBtn" type="button">Sign up</button>
+      <p id="msg"></p>
+      <p>Already have one? <a href="/login">Log in</a></p>
+    </section>
+    <script src="/pwa/auth.js"></script>
+  </body>
+</html>

@@ -1,4 +1,6 @@
 import csv
+import hashlib
+import hmac
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,12 +13,14 @@ from pydantic import BaseModel
 
 from .db import (
     create_session,
+    create_user,
     get_latest_transcript,
     get_session,
     get_session_memory_facts,
     get_session_skill_hints,
     get_session_transcripts,
     get_usage_totals,
+    get_user_password_hash,
     init_sqlite,
     log_usage_event,
     save_memory_facts,
@@ -69,8 +73,36 @@ class TrustBacklogRequest(BaseModel):
     output_path: str | None = None
 
 
+class AuthRequest(BaseModel):
+    user_id: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    ok: bool
+    user_id: str
+
+
 def _request_user_id(x_user_id: str | None) -> str:
     return (x_user_id or 'local-bob').strip() or 'local-bob'
+
+
+def _hash_password(user_id: str, password: str) -> str:
+    salt = os.getenv('AUTH_PASSWORD_SALT', 'voice-debrief-dev-salt')
+    digest = hashlib.sha256(f"{user_id}:{password}:{salt}".encode('utf-8')).hexdigest()
+    return f"sha256${digest}"
+
+
+def _validate_auth_payload(req: AuthRequest) -> tuple[str, str]:
+    user_id = (req.user_id or '').strip()
+    password = req.password or ''
+    if len(user_id) < 3 or len(user_id) > 64:
+        raise HTTPException(status_code=400, detail='user_id must be 3-64 characters')
+    if any(ch.isspace() for ch in user_id):
+        raise HTTPException(status_code=400, detail='user_id cannot contain spaces')
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail='password must be at least 8 characters')
+    return user_id, password
 
 
 def _assert_owner(session: dict[str, str | None], user_id: str) -> None:
@@ -142,6 +174,42 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "service": "voice-debrief-api"}
+
+    @app.get('/login')
+    async def login_page() -> FileResponse:
+        return FileResponse(PWA_DIR / 'login.html')
+
+    @app.get('/signup')
+    async def signup_page() -> FileResponse:
+        return FileResponse(PWA_DIR / 'signup.html')
+
+    @app.post('/api/auth/signup', response_model=AuthResponse)
+    async def signup(req: AuthRequest) -> AuthResponse:
+        user_id, password = _validate_auth_payload(req)
+        try:
+            create_user(DB_PATH, user_id, _hash_password(user_id, password))
+        except Exception as exc:
+            if 'UNIQUE constraint failed' in str(exc):
+                raise HTTPException(status_code=409, detail='user already exists')
+            raise
+        log_usage_event(DB_PATH, event_type='user_signup', user_id=user_id)
+        return AuthResponse(ok=True, user_id=user_id)
+
+    @app.post('/api/auth/login', response_model=AuthResponse)
+    async def login(req: AuthRequest) -> AuthResponse:
+        user_id, password = _validate_auth_payload(req)
+        stored = get_user_password_hash(DB_PATH, user_id)
+        if not stored:
+            raise HTTPException(status_code=401, detail='invalid credentials')
+        if not hmac.compare_digest(stored, _hash_password(user_id, password)):
+            raise HTTPException(status_code=401, detail='invalid credentials')
+        log_usage_event(DB_PATH, event_type='user_login', user_id=user_id)
+        return AuthResponse(ok=True, user_id=user_id)
+
+    @app.get('/api/auth/me', response_model=AuthResponse)
+    async def auth_me(x_user_id: str | None = Header(default=None)) -> AuthResponse:
+        user_id = _request_user_id(x_user_id)
+        return AuthResponse(ok=True, user_id=user_id)
 
     @app.get('/api/admin/usage-summary')
     async def usage_summary(x_admin_key: str | None = Header(default=None)) -> dict:
