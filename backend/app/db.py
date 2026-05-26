@@ -13,6 +13,7 @@ MIGRATION_0005 = "0005_skill_hints"
 MIGRATION_0006 = "0006_session_ownership"
 MIGRATION_0007 = "0007_usage_events"
 MIGRATION_0008 = "0008_users"
+MIGRATION_0009 = "0009_user_telegram_links"
 
 MIGRATION_0001_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -86,6 +87,16 @@ CREATE TABLE IF NOT EXISTS debrief_users (
     user_id TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"""
+
+MIGRATION_0009_SQL = """
+CREATE TABLE IF NOT EXISTS debrief_user_telegram_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL UNIQUE,
+    telegram_chat_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 """
 
@@ -172,6 +183,15 @@ def init_sqlite(sqlite_db_path: str | Path) -> Path:
             VALUES (?)
             """,
             (MIGRATION_0008,),
+        )
+
+        conn.executescript(MIGRATION_0009_SQL)
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO schema_migrations (migration_name)
+            VALUES (?)
+            """,
+            (MIGRATION_0009,),
         )
         conn.commit()
 
@@ -403,6 +423,35 @@ def get_user_password_hash(sqlite_db_path: str | Path, user_id: str) -> str | No
             """
             SELECT password_hash
             FROM debrief_users
+            WHERE user_id=?
+            """,
+            (user_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return str(row[0])
+
+
+def upsert_user_telegram_chat_id(sqlite_db_path: str | Path, user_id: str, telegram_chat_id: str) -> None:
+    with sqlite3.connect(sqlite_db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO debrief_user_telegram_links (user_id, telegram_chat_id, updated_at)
+            VALUES (?, ?, datetime('now'))
+            ON CONFLICT(user_id)
+            DO UPDATE SET telegram_chat_id=excluded.telegram_chat_id, updated_at=datetime('now')
+            """,
+            (user_id, telegram_chat_id),
+        )
+        conn.commit()
+
+
+def get_user_telegram_chat_id(sqlite_db_path: str | Path, user_id: str) -> str | None:
+    with sqlite3.connect(sqlite_db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT telegram_chat_id
+            FROM debrief_user_telegram_links
             WHERE user_id=?
             """,
             (user_id,),

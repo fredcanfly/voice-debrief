@@ -6,6 +6,8 @@ const stopBtn = document.getElementById('stopBtn');
 const statusEl = document.getElementById('status');
 const resultEl = document.getElementById('result');
 const accountNameEl = document.getElementById('accountName');
+const telegramStatusEl = document.getElementById('telegramStatus');
+const linkTelegramBtn = document.getElementById('linkTelegramBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 
 const USER_ID_KEY = 'voiceDebrief.userId';
@@ -16,6 +18,10 @@ function resolveUserId() {
   return fromStorage || FALLBACK_USER_ID;
 }
 
+function authHeaders() {
+  return { 'x-user-id': resolveUserId() };
+}
+
 function setStatus(text, cls = '') {
   statusEl.textContent = text;
   statusEl.className = cls;
@@ -24,6 +30,36 @@ function setStatus(text, cls = '') {
 function setAccountInfo() {
   if (!accountNameEl) return;
   accountNameEl.textContent = resolveUserId();
+}
+
+async function refreshTelegramStatus() {
+  if (!telegramStatusEl) return;
+  try {
+    const res = await fetch('/api/integrations/telegram/status', { headers: authHeaders() });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    telegramStatusEl.textContent = data.linked ? `Linked (${data.telegram_chat_id || 'hidden'})` : 'Not linked';
+  } catch (_error) {
+    telegramStatusEl.textContent = 'Unavailable';
+  }
+}
+
+async function linkTelegram() {
+  const chatId = window.prompt('Enter your Telegram chat ID (or group chat ID):');
+  if (!chatId) return;
+
+  try {
+    const res = await fetch('/api/integrations/telegram/link', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'content-type': 'application/json' },
+      body: JSON.stringify({ telegram_chat_id: chatId.trim() }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    setStatus('Telegram linked.', 'ok');
+    await refreshTelegramStatus();
+  } catch (error) {
+    setStatus(`Telegram link failed: ${error.message}`, 'err');
+  }
 }
 
 async function startRecording() {
@@ -65,8 +101,7 @@ async function uploadAudio(blob) {
   form.append('file', blob, 'pwa-recording.webm');
 
   try {
-    const headers = { 'x-user-id': resolveUserId() };
-    const res = await fetch('/api/debrief/audio-upload', { method: 'POST', body: form, headers });
+    const res = await fetch('/api/debrief/audio-upload', { method: 'POST', body: form, headers: authHeaders() });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
 
@@ -88,11 +123,19 @@ stopBtn.addEventListener('click', () => {
   stopRecording().catch((e) => setStatus(`Stop error: ${e.message}`, 'err'));
 });
 
+if (linkTelegramBtn) {
+  linkTelegramBtn.addEventListener('click', () => {
+    linkTelegram().catch((e) => setStatus(`Telegram link error: ${e.message}`, 'err'));
+  });
+}
+
 setAccountInfo();
 
 if (!window.localStorage?.getItem(USER_ID_KEY)) {
   window.location.href = '/login';
 }
+
+refreshTelegramStatus().catch(() => {});
 
 if (logoutBtn) {
   logoutBtn.addEventListener('click', () => {

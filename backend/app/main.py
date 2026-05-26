@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+import httpx
+
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +23,7 @@ from .db import (
     get_session_transcripts,
     get_usage_totals,
     get_user_password_hash,
+    get_user_telegram_chat_id,
     init_sqlite,
     log_usage_event,
     save_memory_facts,
@@ -28,6 +31,7 @@ from .db import (
     save_transcript,
     set_session_ended,
     set_session_started,
+    upsert_user_telegram_chat_id,
 )
 from .hermes_memory import extract_memory_facts_from_transcript
 from .hermes_skills import extract_skill_hints_from_transcript
@@ -83,6 +87,16 @@ class AuthResponse(BaseModel):
     user_id: str
 
 
+class TelegramLinkRequest(BaseModel):
+    telegram_chat_id: str
+
+
+class TelegramLinkResponse(BaseModel):
+    ok: bool
+    linked: bool
+    telegram_chat_id: str | None = None
+
+
 def _request_user_id(x_user_id: str | None) -> str:
     return (x_user_id or 'local-bob').strip() or 'local-bob'
 
@@ -103,6 +117,35 @@ def _validate_auth_payload(req: AuthRequest) -> tuple[str, str]:
     if len(password) < 8:
         raise HTTPException(status_code=400, detail='password must be at least 8 characters')
     return user_id, password
+
+
+def _mask_chat_id(chat_id: str | None) -> str | None:
+    if not chat_id:
+        return None
+    if len(chat_id) <= 4:
+        return '*' * len(chat_id)
+    return ('*' * (len(chat_id) - 4)) + chat_id[-4:]
+
+
+def _send_telegram_note(chat_id: str, text: str) -> bool:
+    token = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+    if not token:
+        return False
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        'chat_id': chat_id,
+        'text': text[:3800],
+        'disable_web_page_preview': True,
+    }
+
+    try:
+        response = httpx.post(url, json=payload, timeout=20)
+        response.raise_for_status()
+        body = response.json()
+        return bool(body.get('ok'))
+    except Exception:
+        return False
 
 
 def _assert_owner(session: dict[str, str | None], user_id: str) -> None:
@@ -210,6 +253,22 @@ def create_app() -> FastAPI:
     async def auth_me(x_user_id: str | None = Header(default=None)) -> AuthResponse:
         user_id = _request_user_id(x_user_id)
         return AuthResponse(ok=True, user_id=user_id)
+
+    @app.get('/api/integrations/telegram/status', response_model=TelegramLinkResponse)
+    async def telegram_status(x_user_id: str | None = Header(default=None)) -> TelegramLinkResponse:
+        user_id = _request_user_id(x_user_id)
+        chat_id = get_user_telegram_chat_id(DB_PATH, user_id)
+        return TelegramLinkResponse(ok=True, linked=bool(chat_id), telegram_chat_id=_mask_chat_id(chat_id))
+
+    @app.post('/api/integrations/telegram/link', response_model=TelegramLinkResponse)
+    async def telegram_link(req: TelegramLinkRequest, x_user_id: str | None = Header(default=None)) -> TelegramLinkResponse:
+        user_id = _request_user_id(x_user_id)
+        chat_id = str(req.telegram_chat_id or '').strip()
+        if not chat_id:
+            raise HTTPException(status_code=400, detail='telegram_chat_id is required')
+        upsert_user_telegram_chat_id(DB_PATH, user_id, chat_id)
+        log_usage_event(DB_PATH, event_type='telegram_linked', user_id=user_id)
+        return TelegramLinkResponse(ok=True, linked=True, telegram_chat_id=_mask_chat_id(chat_id))
 
     @app.get('/api/admin/usage-summary')
     async def usage_summary(x_admin_key: str | None = Header(default=None)) -> dict:
@@ -471,6 +530,21 @@ def create_app() -> FastAPI:
         doc_path = user_docs_dir / f"{session_id}-{result['slug']}.md"
         doc_path.write_text(result["markdown"], encoding="utf-8")
         log_usage_event(DB_PATH, event_type='document_generated', user_id=user_id, session_id=session_id)
+
+        telegram_chat_id = get_user_telegram_chat_id(DB_PATH, user_id)
+        if telegram_chat_id:
+            message = (
+                f"Voice Debrief: {result['title']}\n\n"
+                f"Session: {session_id}\n\n"
+                f"{result['markdown']}"
+            )
+            sent_ok = _send_telegram_note(telegram_chat_id, message)
+            log_usage_event(
+                DB_PATH,
+                event_type='telegram_sent' if sent_ok else 'telegram_send_failed',
+                user_id=user_id,
+                session_id=session_id,
+            )
 
         return DebriefDocumentResponse(
             session_id=session_id,
